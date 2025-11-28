@@ -4,19 +4,19 @@ from typing import Literal, Dict, Optional
 
 import requests
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # ==========================
 # CONFIG ESP32 (local vs Render)
 # ==========================
-# - LOCAL (en tu casa, backend corriendo en tu PC y ESP32 en la misma red):
-#     set FORWARD_TO_ESP32=true
-#     set ESP32_BASE_URL=http://192.168.1.50   (o la IP del ESP)
+# LOCAL (backend en tu PC + ESP32 en la misma red):
+#   set FORWARD_TO_ESP32=true
+#   set ESP32_BASE_URL=http://192.168.1.50   (IP del ESP32)
 #
-# - RENDER (backend en la nube):
-#     NO pongas FORWARD_TO_ESP32 o déjala en false
-#     (Render no puede ver la red local de tu casa).
-#
+# RENDER (backend en la nube):
+#   FORWARD_TO_ESP32 debe ser false (por defecto),
+#   porque Render no puede ver tu red local.
 
 ESP32_BASE_URL = os.getenv("ESP32_BASE_URL", "http://192.168.1.50")
 FORWARD_TO_ESP32 = os.getenv("FORWARD_TO_ESP32", "false").lower() == "true"
@@ -84,7 +84,7 @@ class HouseState(BaseModel):
 # ESTADO EN MEMORIA
 # ==========================
 
-now = datetime.utcnow  # función helper para timestamps
+now = datetime.utcnow  # helper para timestamps
 
 state = HouseState(
     doors={
@@ -139,6 +139,28 @@ app = FastAPI(
     description="API para controlar y monitorear la Casa IoT (puertas, luces, sensores, etc.)",
 )
 
+# CORS para permitir que tu front (HTML/JS) llame al backend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],      # para demo. Luego puedes limitarlo.
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ==========================
+# ROOT
+# ==========================
+
+@app.get("/")
+def root():
+    return {
+        "message": "Casa IoT backend OK",
+        "docs": "/docs",
+        "status": "/status"
+    }
+
 
 # ==========================
 # ENDPOINT GENERAL DE ESTADO
@@ -154,10 +176,10 @@ def get_status():
 
 
 # ==========================
-# PUERTA PRINCIPAL
+# PUERTA PRINCIPAL  (ESP: /principal/open y /principal/close)
 # ==========================
 
-@app.api_route("/principal/open", methods=["GET", "POST"])
+@app.get("/principal/open")
 def principal_open():
     state.doors["principal"].is_open = True
     state.doors["principal"].last_update = now()
@@ -169,7 +191,7 @@ def principal_open():
     }
 
 
-@app.api_route("/principal/close", methods=["GET", "POST"])
+@app.get("/principal/close")
 def principal_close():
     state.doors["principal"].is_open = False
     state.doors["principal"].last_update = now()
@@ -181,10 +203,10 @@ def principal_close():
 
 
 # ==========================
-# PUERTA GARAGE
+# PUERTA GARAGE (ESP: /garage/open y /garage/close)
 # ==========================
 
-@app.api_route("/garage/open", methods=["GET", "POST"])
+@app.get("/garage/open")
 def garage_open():
     state.doors["garage"].is_open = True
     state.doors["garage"].last_update = now()
@@ -196,7 +218,7 @@ def garage_open():
     }
 
 
-@app.api_route("/garage/close", methods=["GET", "POST"])
+@app.get("/garage/close")
 def garage_close():
     state.doors["garage"].is_open = False
     state.doors["garage"].last_update = now()
@@ -208,10 +230,10 @@ def garage_close():
 
 
 # ==========================
-# ULTRASONIDO
+# ULTRASONIDO (ESP: /ultra/on y /ultra/off)
 # ==========================
 
-@app.api_route("/ultra/on", methods=["GET", "POST"])
+@app.get("/ultra/on")
 def ultra_on():
     state.ultra.active = True
     state.ultra.last_update = now()
@@ -222,7 +244,7 @@ def ultra_on():
     }
 
 
-@app.api_route("/ultra/off", methods=["GET", "POST"])
+@app.get("/ultra/off")
 def ultra_off():
     state.ultra.active = False
     state.ultra.last_update = now()
@@ -241,6 +263,7 @@ class UltraDistanceUpdate(BaseModel):
 def ultra_update_distance(data: UltraDistanceUpdate):
     """
     Endpoint para que el ESP32 envíe la última distancia medida.
+    (No existe en el Arduino original, es extra para tu backend)
     """
     state.ultra.last_distance_cm = data.distance_cm
     state.ultra.last_update = now()
@@ -251,10 +274,10 @@ def ultra_update_distance(data: UltraDistanceUpdate):
 
 
 # ==========================
-# LUCES
+# LUCES (ESP: /cocina/on, /cocina/off, /sala/on, /sala/off, /dorm/on, /dorm/off)
 # ==========================
 
-@app.api_route("/cocina/on", methods=["GET", "POST"])
+@app.get("/cocina/on")
 def cocina_on():
     light = state.lights["cocina"]
     light.is_on = True
@@ -266,7 +289,7 @@ def cocina_on():
     }
 
 
-@app.api_route("/cocina/off", methods=["GET", "POST"])
+@app.get("/cocina/off")
 def cocina_off():
     light = state.lights["cocina"]
     light.is_on = False
@@ -278,7 +301,7 @@ def cocina_off():
     }
 
 
-@app.api_route("/sala/on", methods=["GET", "POST"])
+@app.get("/sala/on")
 def sala_on():
     light = state.lights["sala"]
     light.is_on = True
@@ -290,7 +313,7 @@ def sala_on():
     }
 
 
-@app.api_route("/sala/off", methods=["GET", "POST"])
+@app.get("/sala/off")
 def sala_off():
     light = state.lights["sala"]
     light.is_on = False
@@ -302,7 +325,7 @@ def sala_off():
     }
 
 
-@app.api_route("/dorm/on", methods=["GET", "POST"])
+@app.get("/dorm/on")
 def dorm_on():
     light = state.lights["dorm"]
     light.is_on = True
@@ -314,7 +337,7 @@ def dorm_on():
     }
 
 
-@app.api_route("/dorm/off", methods=["GET", "POST"])
+@app.get("/dorm/off")
 def dorm_off():
     light = state.lights["dorm"]
     light.is_on = False
@@ -327,10 +350,10 @@ def dorm_off():
 
 
 # ==========================
-# PIR
+# PIR (ESP: /pir/on y /pir/off)
 # ==========================
 
-@app.api_route("/pir/on", methods=["GET", "POST"])
+@app.get("/pir/on")
 def pir_on():
     state.pir.active = True
     state.pir.last_update = now()
@@ -341,7 +364,7 @@ def pir_on():
     }
 
 
-@app.api_route("/pir/off", methods=["GET", "POST"])
+@app.get("/pir/off")
 def pir_off():
     state.pir.active = False
     state.pir.last_update = now()
@@ -353,7 +376,7 @@ def pir_off():
 
 
 # ==========================
-# DHT11 (TEMP / HUM)
+# DHT11 (TEMP / HUM)  (extra para backend)
 # ==========================
 
 class DhtUpdate(BaseModel):
@@ -384,10 +407,10 @@ def dht_get():
 
 
 # ==========================
-# MODO SEGURO
+# MODO SEGURO (ESP: /modo/seguro)
 # ==========================
 
-@app.api_route("/modo/seguro", methods=["GET", "POST"])
+@app.get("/modo/seguro")
 def modo_seguro():
     # Apagar luces
     for light in state.lights.values():
