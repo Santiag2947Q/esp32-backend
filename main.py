@@ -7,16 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# ==========================
-# CONFIG ESP32 (local vs Render)
-# ==========================
-# LOCAL (backend en tu PC + ESP32 en la misma red):
-#   set FORWARD_TO_ESP32=true
-#   set ESP32_BASE_URL=http://192.168.1.50   (IP del ESP32)
-#
-# RENDER (backend en la nube):
-#   FORWARD_TO_ESP32 debe ser false (por defecto),
-#   porque Render no puede ver tu red local.
+
 
 ESP32_BASE_URL = os.getenv("ESP32_BASE_URL", "http://192.168.1.50")
 FORWARD_TO_ESP32 = os.getenv("FORWARD_TO_ESP32", "false").lower() == "true"
